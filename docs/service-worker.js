@@ -8,17 +8,18 @@
  * - CDN resources caching (ffmpeg library, utilities, icons)
  */
 
-const CACHE_NAME = 'ffmpeg-editor-v4';
-const RUNTIME_CACHE = 'ffmpeg-editor-runtime-v4';
-const CDN_CACHE = 'ffmpeg-editor-cdn-v4';
+const CACHE_PREFIX = 'ffmpeg-webcli-' + self.registration.scope;
+const CACHE_NAME = CACHE_PREFIX + 'static-v1';
+const RUNTIME_CACHE = CACHE_PREFIX + 'runtime-v1';
+const CDN_CACHE = CACHE_PREFIX + 'cdn-v1';
 
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/worker.js',
-  '/coi-serviceworker.js',
-  '/manifest.json',
-];
+  './',
+  './index.html',
+  './worker.js',
+  './coi-serviceworker.js',
+  './manifest.json',
+].map(path => new URL(path, self.registration.scope).href);
 
 const CDN_RESOURCES = [
   // FFmpeg library - core modules
@@ -72,7 +73,8 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && 
+          if (cacheName.startsWith(CACHE_PREFIX) &&
+              cacheName !== CACHE_NAME &&
               cacheName !== RUNTIME_CACHE && 
               cacheName !== CDN_CACHE) {
             console.log('[SW] Deleting old cache:', cacheName);
@@ -146,7 +148,7 @@ self.addEventListener('fetch', (event) => {
               
               // Return offline page for navigation requests
               if (request.destination === 'document') {
-                return caches.match('/index.html');
+                return caches.match(new URL('./index.html', self.registration.scope).href);
               }
               
               return new Response('Offline - resource not available', {
@@ -232,7 +234,7 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'CLEAR_CACHES') {
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cacheName) => {
+        cacheNames.filter(cacheName => cacheName.startsWith(CACHE_PREFIX)).map((cacheName) => {
           console.log('[SW] Clearing cache:', cacheName);
           return caches.delete(cacheName);
         })

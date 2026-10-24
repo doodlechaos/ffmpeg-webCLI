@@ -1,5 +1,27 @@
 # ffmpeg webCLI
 
+## This fork: Mono to Stereo operation
+
+**[Open the full editor](https://doodlechaos.github.io/ffmpeg-webCLI/)** · **[Open with Mono to Stereo selected](https://doodlechaos.github.io/ffmpeg-webCLI/?op=mono-to-stereo)**
+
+The app retains the upstream defaults and all editing operations, with a new **Mono to Stereo**
+operation tile. Tap it, choose a video, then press **Process Video** and download the result.
+The `?op=mono-to-stereo` link simply preselects that tile; it does not start processing.
+
+This operation duplicates mono input or averages stereo input into identical left and right
+channels, encodes audio as 192 kbps AAC, and copies the original video stream into MOV output.
+One-sided stereo recordings become quieter because the two channels are averaged to prevent
+clipping. This creates dual-mono audio, not spatial stereo. Processing stays on the device.
+The original GPL-3.0 license and upstream documentation are retained.
+
+The existing hash-command API also accepts `{"op":"stereo_fix","args":{},"run":false}`
+to preselect the tile, or `run:true` to use the existing automatic recipe execution.
+GitHub Pages serves `main` → `/docs`; the upstream custom domain file is removed.
+Test a short recording and download on a real iPhone before relying on it for large videos.
+
+---
+
+
 [![GitHub stars](https://img.shields.io/github/stars/tejaswigowda/ffmpeg-webCLI?style=social)](https://github.com/tejaswigowda/ffmpeg-webCLI/stargazers)
 
 A browser-based video editor powered by [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm). <b><ins>No uploads, no servers -- all processing happens locally</ins></b> in your browser using WebAssembly.

@@ -327,7 +327,7 @@
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
     100% local. Data never leaves your browser.
   </span>
-  <a class="gh-link" href="https://github.com/tejaswigowda/ffmpeg-webCLI" target="_blank" rel="noopener">
+  <a class="gh-link" href="https://github.com/doodlechaos/ffmpeg-webCLI" target="_blank" rel="noopener">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.341-3.369-1.341-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
     <span>Fork on GitHub</span>
   </a>
@@ -423,6 +423,7 @@
             <button class="op-tile active" id="op-convert"       onclick="setOp('convert')"><i class="fas fa-arrows-rotate"></i> Convert</button>
             <button class="op-tile" id="op-resizecompress" onclick="setOp('resizecompress')"><i class="fas fa-compress"></i> Resize &amp; Compress</button>
             <button class="op-tile" id="op-audio"         onclick="setOp('audio')"><i class="fas fa-music"></i> Extract Audio</button>
+            <button class="op-tile" id="op-stereo_fix"    onclick="setOp('stereo_fix')"><i class="fas fa-ear-listen"></i> Mono to Stereo</button>
             <button class="op-tile" id="op-mute"          onclick="setOp('mute')"><i class="fas fa-volume-xmark"></i> Mute</button>
             <button class="op-tile" id="op-gif"           onclick="setOp('gif')"><i class="fas fa-film"></i> To GIF</button>
             <button class="op-tile" id="op-speed"         onclick="setOp('speed')"><i class="fas fa-bolt"></i> Speed</button>
@@ -460,6 +461,13 @@
                 <p>Use the Output Format selector below to choose format.</p>
               </div>
             </div>
+          </div>
+
+          <!-- Mono to Stereo -->
+          <div class="op-panel hidden" id="panel-stereo_fix">
+            <h4>Mono to Stereo</h4>
+            <p class="hint">Make audio play in both ears. Works with mono and one-sided recordings. Both output channels contain the same audio.</p>
+            <p class="hint" style="margin-top:8px">Keeps the original video quality and saves a MOV file. Choose a video, then press Process Video.</p>
           </div>
 
           <!-- Resize & Compress -->
@@ -1936,10 +1944,10 @@ function setOp(op) {
     outFmtDropdown.disabled = false;
   }
   
-  // Hide general output format selector for Auto-Caption (it has its own format selector)
-  if (op === 'autocaption' && outFmtWrap) {
+  // These operations choose their output format in their own panel.
+  if ((op === 'autocaption' || op === 'stereo_fix') && outFmtWrap) {
     outFmtWrap.classList.add('hidden');
-  } else if (currentOp === 'autocaption' && outFmtWrap) {
+  } else if ((currentOp === 'autocaption' || currentOp === 'stereo_fix') && outFmtWrap) {
     outFmtWrap.classList.remove('hidden');
   }
   
@@ -2033,6 +2041,7 @@ function updateSizeEstimate() {
     case 'info':     { wrap.classList.add('hidden'); return; }
     case 'thumbnail':{ wrap.classList.add('hidden'); return; }
     case 'raw':       { wrap.classList.add('hidden'); return; }
+    case 'stereo_fix': { wrap.classList.add('hidden'); return; }
     case 'pad':        { estimated = srcSize * (dur / vidDur); break; }
     case 'normalize':  { estimated = srcSize * (dur / vidDur); break; }
     case 'denoise':    { estimated = srcSize * (dur / vidDur); break; }
@@ -2199,6 +2208,10 @@ async function runProcess() {
     let ext = 'mp4';
 
     switch (currentOp) {
+      case 'stereo_fix':
+        ext = 'mov';
+        args.push(...STEREO_FIX_ARGS);
+        break;
       case 'convert': {
         ext = document.getElementById('singleOutFmt').value;
         if (['mp4','mkv','mov'].includes(ext)) {
@@ -3001,7 +3014,8 @@ async function processBatchFile(item) {
   
   // Get output format from batch output format selector
   const outFmt = document.getElementById('stackOutFmt')?.value || 'mp4';
-  const outExt = outFmt === 'gif' ? 'gif' : 
+  const outExt = currentOp === 'stereo_fix' ? 'mov' :
+                 outFmt === 'gif' ? 'gif' :
                  outFmt === 'mkv' ? 'mkv' :
                  outFmt === 'mov' ? 'mov' :
                  outFmt === 'webm' ? 'webm' :
@@ -3016,14 +3030,15 @@ async function processBatchFile(item) {
   addLog(`  Writing ${file.name}…`, 'log');
   await ffmpeg.writeFile(inName, await fetchFile(file));
 
-  // Create video element to get dimensions and duration
+  // Stream-copy stereo repair does not need browser codec support or metadata.
   const vid = document.createElement('video');
-  const url = await blobToDataURL(file);
-  vid.src = url;
-  
-  await new Promise(resolve => {
-    vid.onloadedmetadata = () => resolve();
-  });
+  if (currentOp !== 'stereo_fix') {
+    const url = await blobToDataURL(file);
+    vid.src = url;
+    await new Promise(resolve => {
+      vid.onloadedmetadata = () => resolve();
+    });
+  }
 
   // Trim disabled in batch mode — each file processes from start to end
   const hasTrim = false;
@@ -3081,7 +3096,7 @@ async function processBatchFile(item) {
 
   // Read output
   let data = await ffmpeg.readFile(finalOut);
-  let blobType = 'video/' + finalExt;
+  let blobType = currentOp === 'stereo_fix' ? mime(finalExt) : 'video/' + finalExt;
   if (currentOp === 'thumbnail') {
     if (thumbnailUserExt === 'jpg') { data = await pngToJpeg(data, 0.92); blobType = 'image/jpeg'; }
     else { blobType = 'image/png'; }
@@ -3256,6 +3271,9 @@ function buildOperationArgs(args, videoEl, inputExt) {
             fmt === 'avi' ? 'avi' : 'mp4';
 
   switch (currentOp) {
+    case 'stereo_fix':
+      args.push(...STEREO_FIX_ARGS);
+      break;
     case 'convert': {
       if (['mp4','mkv','mov'].includes(ext)) {
         args.push('-c:v','libx264','-preset','fast','-c:a','aac');
@@ -4420,7 +4438,7 @@ function setMode(mode) {
   stackMode = (mode === 'stack');
   document.getElementById('modeSingle').classList.toggle('active', !stackMode);
   document.getElementById('modeStack').classList.toggle('active', stackMode);
-  document.getElementById('singleOutFmtWrap').classList.toggle('hidden', stackMode);
+  document.getElementById('singleOutFmtWrap').classList.toggle('hidden', stackMode || currentOp === 'stereo_fix' || currentOp === 'autocaption');
   document.getElementById('processBtn').classList.toggle('hidden', stackMode);
   document.getElementById('addStackBtn').classList.toggle('hidden', !stackMode);
   document.getElementById('processStackBtn').classList.toggle('hidden', !stackMode);
@@ -5203,7 +5221,13 @@ async function confirmAutoCaptionTranscript() {
 // into the same exec path used by the UI (writeFile → execWithWebmFallback →
 // readFile → renderOutput). See docs/command.schema.json for the schema this
 // validator implements.
+// Normalize channel gains to avoid clipping while duplicating mono at its original level.
+const STEREO_FIX_FILTER = 'pan=stereo|c0<c0+c1|c1<c0+c1';
+const STEREO_FIX_ARGS = ['-map', '0:v:0', '-map', '0:a:0', '-c:v', 'copy',
+  '-af', STEREO_FIX_FILTER, '-c:a', 'aac', '-b:a', '192k'];
+
 const HASH_CMD_OPS = {
+  stereo_fix: { args: {} },
   trim: {
     args: {
       start: { type: 'number', min: 0 },
@@ -5322,6 +5346,9 @@ function hideHashCmdBanner() {
 function preloadOpFromCommand(cmd) {
   const { op, args } = cmd;
   switch (op) {
+    case 'stereo_fix':
+      setOp('stereo_fix');
+      break;
     case 'trim': {
       const end = vidDur > 0 ? Math.min(args.end, vidDur) : args.end;
       document.getElementById('trimStart').value = Math.min(args.start, end);
@@ -5352,7 +5379,7 @@ function preloadOpFromCommand(cmd) {
   updateRawPreview();
 }
 
-// Builds the ffmpeg args for one of the five hash-command ops. Independent of
+// Builds the ffmpeg args for a hash-command op. Independent of
 // the UI switch in runProcess() — reads only from cmd.args, never from DOM
 // fields, so the agent path never needs to touch a single control.
 function buildHashCommandArgs(cmd, inName) {
@@ -5361,6 +5388,10 @@ function buildHashCommandArgs(cmd, inName) {
   const built = [];
 
   switch (op) {
+    case 'stereo_fix':
+      ext = 'mov';
+      built.push('-i', inName, ...STEREO_FIX_ARGS);
+      break;
     case 'trim': {
       const dur   = vidDur || document.getElementById('inputVideo').duration || 0;
       const start = Math.max(0, args.start);
@@ -5475,7 +5506,14 @@ async function runHashCommand(cmd) {
 function handleHashCommand() {
   const result = parseHashCommand();
   hideHashCmdBanner();
-  if (result === null) { pendingHashCommand = null; return; }
+  if (result === null) {
+    pendingHashCommand = null;
+    const presetOp = new URLSearchParams(location.search).get('op');
+    if (presetOp === 'mono-to-stereo' || presetOp === 'stereo_fix') {
+      setOp('stereo_fix');
+    }
+    return;
+  }
   if (!result.ok) {
     pendingHashCommand = null;
     addLog('Hash command rejected: ' + result.error, 'err');

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://tejaswigowda.com/ffmpeg-webCLI/command.schema.json",
+  "$id": "https://doodlechaos.github.io/ffmpeg-webCLI/command.schema.json",
   "title": "ffmpeg-webCLI hash command",
   "description": "A single operation carried in the page URL hash as #cmd=<encodeURIComponent(JSON.stringify(command))>. Describes only the OPERATION — the input file is never part of this JSON; it is provided separately (user file picker, or an agent injecting a file into the page). Validated host-side in docs/index.html before any execution. Single-op only for this MVP — no chaining, no versioning, no extension points.",
   "type": "object",
@@ -9,7 +9,7 @@
   "properties": {
     "op": {
       "type": "string",
-      "enum": ["trim", "convert", "compress", "extract_audio", "gif"],
+      "enum": ["stereo_fix", "trim", "convert", "compress", "extract_audio", "gif"],
       "description": "Which known, closed-set operation to run."
     },
     "args": {
@@ -23,6 +23,12 @@
     }
   },
   "oneOf": [
+    {
+      "properties": {
+        "op": { "const": "stereo_fix" },
+        "args": { "type": "object", "additionalProperties": false, "properties": {} }
+      }
+    },
     {
       "properties": {
         "op": { "const": "trim" },
