@@ -8,6 +8,9 @@ The app retains the upstream defaults and all editing operations, with a new **M
 operation tile. Tap it, choose a video, then press **Process Video** and download the result.
 The `?op=mono-to-stereo` link simply preselects that tile; it does not start processing.
 
+After processing, **Save / Share Video** opens the device's share menu when supported.
+On iPhone, choose **Save Video** to add the result to Photos. **Download** remains available.
+
 This operation duplicates mono input or averages stereo input into identical left and right
 channels, encodes audio as 192 kbps AAC, and copies the original video stream into MOV output.
 One-sided stereo recordings become quieter because the two channels are averaged to prevent

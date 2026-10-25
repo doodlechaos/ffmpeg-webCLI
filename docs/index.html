@@ -1142,6 +1142,8 @@
           <div id="quickDownloadWrap" class="hidden" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
             <p style="font-size:0.78rem;color:var(--muted);margin-bottom:8px">Output ready:</p>
             <button class="btn btn-success btn-block" id="quickDlBtn" onclick="download()"><i class="fas fa-download"></i> Download output</button>
+            <button class="btn btn-primary btn-block hidden" id="quickShareVideoBtn" onclick="shareVideo()" style="margin-top:8px"><i class="fas fa-share-from-square"></i> Save / Share Video</button>
+            <p class="hint hidden" id="quickVideoShareStatus" style="margin-top:8px"></p>
             <span class="out-size" id="quickOutMeta" style="display:block;font-size:0.72rem;color:var(--muted);text-align:center;margin-top:6px"></span>
           </div>
         </div>
@@ -1160,8 +1162,10 @@
             <img id="outImg" class="hidden" style="max-width:100%;border-radius:7px;margin-top:8px;display:block">
             <div class="out-actions">
               <button class="btn btn-success" id="dlBtn" onclick="download()"><i class="fas fa-download"></i> Download</button>
+              <button class="btn btn-primary hidden" id="shareVideoBtn" onclick="shareVideo()"><i class="fas fa-share-from-square"></i> Save / Share Video</button>
               <span class="out-size" id="outMeta"></span>
             </div>
+            <p class="hint hidden" id="videoShareStatus" role="status" style="margin-top:8px"></p>
             <!-- Batch outputs - shown inline in output section -->
             <div id="batchOutputsWrap" class="hidden" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
               <div style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:12px;">Batch Outputs (<span id="batchCompleteCount">0</span>)</div>
@@ -1220,6 +1224,9 @@ let vidDur    = 0;
 let currentOp    = 'convert';
 let outBlob      = null;
 let outExt       = 'mp4';
+let videoShareFile = null;
+let videoShareInProgress = false;
+const VIDEO_SHARE_HINT = 'On iPhone, choose Save Video in the share menu to add it to Photos.';
 let lastFormatBeforeGif = 'mp4';  // Store format when switching to gif, restore when switching away
 let rawInput2File = null;
 let rawInput2Ext  = '';
@@ -1639,6 +1646,7 @@ function handleFileInput(input) {
 
 async function handleFile(file) {
   if (!file) return;
+  setVideoShareOutput(null);
   inputFile = file;
   inputExt  = file.name.split('.').pop().toLowerCase() || 'mp4';
   
@@ -1687,6 +1695,7 @@ async function handleFile(file) {
 
 function clearInput() {
   if (batchMode) return;  // Don't clear in batch mode
+  setVideoShareOutput(null);
   inputFile = null;
   if (currentObjectURL) { URL.revokeObjectURL(currentObjectURL); currentObjectURL = null; }
   document.getElementById('inputVideo').src = '';
@@ -1702,6 +1711,7 @@ function clearInput() {
 
 // ── Batch mode functions ─────────────────────────────
 function toggleBatchMode() {
+  setVideoShareOutput(null);
   batchMode = !batchMode;
   const btn = document.getElementById('batchToggle');
   const queueList = document.getElementById('batchQueueList');
@@ -1848,6 +1858,7 @@ function updateBatchQueueUI() {
 function removeBatchFile(index) {
   batchQueue.splice(index, 1);
   updateBatchQueueUI();
+  updateBatchOutputsDisplay();
   syncProcessBtn();
 }
 
@@ -2169,6 +2180,7 @@ async function processVideo() {
 
 async function runProcess() {
   if (!inputFile) return;
+  setVideoShareOutput(null);
 
   if (!isLoaded()) {
     await loadFFmpeg();
@@ -2923,6 +2935,7 @@ async function runProcess() {
 
 // ── Batch Processing ──────────────────────────────────
 async function runBatch() {
+  setVideoShareOutput(null);
   if (batchQueue.length === 0) {
     addLog('Batch queue is empty.', 'warn');
     return;
@@ -3128,6 +3141,7 @@ function updateBatchOutputsDisplay() {
   count.textContent = completed.length;
   
   if (completed.length === 0) {
+    setVideoShareOutput(null);
     wrap.classList.add('hidden');
     return;
   }
@@ -3150,6 +3164,7 @@ function updateBatchOutputsDisplay() {
   const validValues = completed.map(item => String(batchQueue.indexOf(item)));
   if (prevValue && validValues.includes(prevValue)) {
     selectEl.value = prevValue;
+    selectBatchOutput(prevValue);
   } else {
     const firstIdx = batchQueue.indexOf(completed[0]);
     selectEl.value = String(firstIdx);
@@ -3158,6 +3173,7 @@ function updateBatchOutputsDisplay() {
 }
 
 function selectBatchOutput(batchIdx) {
+  setVideoShareOutput(null);
   if (batchIdx == null || batchIdx === '') return;
   const item = batchQueue[parseInt(batchIdx)];
   if (!item || !item.output) return;
@@ -3196,6 +3212,7 @@ function selectBatchOutput(batchIdx) {
   document.getElementById('outMeta').textContent = `${item.outputName} · ${sizeMB.toFixed(2)} MB`;
   const dlBtn = document.getElementById('dlBtn');
   dlBtn.onclick = () => downloadBatchFile(parseInt(batchIdx));
+  setVideoShareOutput(item.output, item.outputName);
   
   infoDiv.innerHTML = `
     <strong>Input:</strong> ${item.file.name}<br>
@@ -3570,6 +3587,56 @@ async function download() {
   a.click();
 }
 
+// Prepare the actual output file before the tap; asynchronous conversion here
+// would lose the user activation required by iPhone's native share menu.
+function setVideoShareOutput(blob, filename = '') {
+  const ext = filename.split('.').pop().toLowerCase();
+  const isVideo = ['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi'].includes(ext);
+  videoShareFile = blob && isVideo ? new File([blob], filename, { type: ext === 'm4v' ? 'video/mp4' : mime(ext) }) : null;
+  for (const id of ['shareVideoBtn', 'quickShareVideoBtn']) {
+    const button = document.getElementById(id);
+    button.classList.toggle('hidden', !videoShareFile);
+    button.disabled = videoShareInProgress;
+  }
+  for (const id of ['videoShareStatus', 'quickVideoShareStatus']) {
+    const status = document.getElementById(id);
+    status.classList.toggle('hidden', !videoShareFile);
+    status.textContent = videoShareFile ? VIDEO_SHARE_HINT : '';
+  }
+}
+
+function setVideoShareMessage(message) {
+  for (const id of ['videoShareStatus', 'quickVideoShareStatus']) {
+    document.getElementById(id).textContent = message;
+  }
+}
+
+async function shareVideo() {
+  const file = videoShareFile;
+  if (!file || videoShareInProgress) return;
+  try {
+    if (!navigator.share || !navigator.canShare || !navigator.canShare({ files: [file] })) {
+      setVideoShareMessage('This browser cannot share this video. Use Download, or open this page in Safari on your iPhone.');
+      return;
+    }
+    videoShareInProgress = true;
+    for (const id of ['shareVideoBtn', 'quickShareVideoBtn']) document.getElementById(id).disabled = true;
+    // No await before share(): the click must still have transient activation.
+    await navigator.share({ files: [file] });
+    if (videoShareFile === file) setVideoShareMessage(VIDEO_SHARE_HINT);
+  } catch (err) {
+    if (videoShareFile !== file) return;
+    if (err?.name === 'AbortError') {
+      setVideoShareMessage(VIDEO_SHARE_HINT);
+    } else {
+      setVideoShareMessage('Could not share this video. Tap Save / Share Video to retry, or use Download.');
+    }
+  } finally {
+    videoShareInProgress = false;
+    for (const id of ['shareVideoBtn', 'quickShareVideoBtn']) document.getElementById(id).disabled = false;
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────
 function buildAtempo(sp) {
   // atempo accepts 0.5–2.0; chain filters for out-of-range speeds
@@ -3708,6 +3775,7 @@ async function renderOutput(data, ext) {
   // Hide batch outputs section in single mode output
   const bw = document.getElementById('batchOutputsWrap');
   if (bw) bw.classList.add('hidden');
+  setVideoShareOutput(outBlob, 'output.' + ext);
   
   // Show quick download in options panel (only in single mode, not batch)
   if (!batchMode) {
@@ -4462,6 +4530,7 @@ function setMode(mode) {
 
 // ── Process stack ─────────────────────────────────────
 async function runProcessStack() {
+  setVideoShareOutput(null);
   if (stack.length === 0) return;
 
   // Batch + stack: apply the whole stack to every queued file and show results
@@ -4558,6 +4627,7 @@ function composeStackArgsFor(inName, outName, srcW, srcH, clipDur) {
 
 // ── Process stack across every batched file ────────────
 async function runBatchStack() {
+  setVideoShareOutput(null);
   if (!isLoaded()) {
     await loadFFmpeg();
     if (!isLoaded()) return;
@@ -5446,6 +5516,7 @@ function buildHashCommandArgs(cmd, inName) {
 // progress ('running'|'done'|'error') for the Playwright demo to poll.
 async function runHashCommand(cmd) {
   if (!inputFile) return;
+  setVideoShareOutput(null);
   if (!isLoaded()) {
     await loadFFmpeg();
     if (!isLoaded()) return;
@@ -5542,7 +5613,7 @@ handleHashCommand(); // check for a #cmd= present at initial page load
 // ── Expose all functions to window for inline event handlers ─────────────────────────
 Object.assign(window, {
   loadFFmpeg, handleFile, handleFileInput, clearInput, setOp,
-  updateTrim, processVideo, runProcess, runBatch, download, clearLog, updateSizeEstimate, updateRawPreview,
+  updateTrim, processVideo, runProcess, runBatch, download, shareVideo, clearLog, updateSizeEstimate, updateRawPreview,
   resetCropSelection,
   onRawInput2Change, onSubtitleFileChange,
   onOverlayFileChange, onMixAudioFileChange, onConcatFileChange,
